@@ -1,9 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Inputs dropdown: a larger surface, so a heavier tint than the tab pill, with the same sheen and rim. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
         <shape android:shape="rectangle">
-            <gradient android:angle="270" android:startColor="#F22A2A2E" android:endColor="#F5161618" />
-            <stroke android:width="1dp" android:color="#33FFFFFF" />
+            <solid android:color="#C70C1016" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#29FFFFFF"
+                android:centerColor="#08FFFFFF"
+                android:centerY="0.3"
+                android:endColor="#0DFFFFFF" />
+            <stroke android:width="1dp" android:color="#38FFFFFF" />
             <corners android:radius="20dp" />
         </shape>
     </item>

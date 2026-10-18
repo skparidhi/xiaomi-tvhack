@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Vibrancy over glass: near-white for every tab, not flat grey, so labels hold up over busy wallpapers. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:color="#FF0A0A0A" />
+    <item android:state_selected="true" android:color="#FFFFFFFF" />
+    <item android:color="#EBFFFFFF" />
+</selector>

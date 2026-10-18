@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified YouTube play mark for the glass tile. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="20dp"
+    android:viewportWidth="28"
+    android:viewportHeight="20">
+    <path
+        android:fillColor="#FFFF0033"
+        android:pathData="M5,0 H23 A5,5 0 0 1 28,5 V15 A5,5 0 0 1 23,20 H5 A5,5 0 0 1 0,15 V5 A5,5 0 0 1 5,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M11,5.5 L19.5,10 L11,14.5 Z" />
+</vector>

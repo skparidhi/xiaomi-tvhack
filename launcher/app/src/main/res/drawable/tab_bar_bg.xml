@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Liquid glass pill: dark tint for legibility (no backdrop blur on Android 9), a top-lit sheen and a rim. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#99000000" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="270"
+                android:startColor="#38FFFFFF"
+                android:centerColor="#0DFFFFFF"
+                android:centerY="0.45"
+                android:endColor="#14FFFFFF" />
+            <stroke android:width="1dp" android:color="#38FFFFFF" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+    <!-- Specular line: light catching the top edge. -->
+    <item android:left="14dp" android:right="14dp" android:top="1dp" android:gravity="top">
+        <shape android:shape="rectangle">
+            <size android:height="1dp" />
+            <solid android:color="#66FFFFFF" />
+        </shape>
+    </item>
+</layer-list>

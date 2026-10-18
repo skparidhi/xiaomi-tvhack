@@ -20,4 +20,14 @@
     <string name="cant_open">Can\'t open %1$s</string>
     <string name="date_format">EEEE  d MMMM</string>
     <string name="dream_name">Clock</string>
+    <string name="wordmark" translatable="false">Paridhi</string>
+    <string name="home">Home</string>
+    <string name="apps">Apps</string>
+    <string name="favorites">Favorites</string>
+    <string name="hold_hint">Hold OK for app info</string>    <string name="default_eyebrow">Ready when you are</string>
+    <string name="default_tagline">Press OK to open</string>
+    <string name="welcome_eyebrow">Welcome home</string>
+    <string name="welcome_title">Hello Paridhi</string>
+    <string name="welcome_tagline">Make yourself at home.</string>
+    <string name="no_more_apps">All your apps are in Favorites</string>
 </resources>

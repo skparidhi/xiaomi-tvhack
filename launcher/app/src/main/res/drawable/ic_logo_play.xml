@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simplified four-colour Google Play triangle. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="24dp"
+    android:viewportWidth="22"
+    android:viewportHeight="24">
+    <!-- blue: left -->
+    <path android:fillColor="#FF4285F4" android:pathData="M1,0.8 L1,23.2 L12.4,12 Z" />
+    <!-- green: top -->
+    <path android:fillColor="#FF34A853" android:pathData="M1,0.8 L12.4,12 L16,8.4 Z" />
+    <!-- red: bottom -->
+    <path android:fillColor="#FFEA4335" android:pathData="M1,23.2 L12.4,12 L16,15.6 Z" />
+    <!-- yellow: tip -->
+    <path android:fillColor="#FFFBBC04" android:pathData="M16,8.4 L21,11.2 Q22,12 21,12.8 L16,15.6 L12.4,12 Z" />
+</vector>

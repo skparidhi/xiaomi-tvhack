@@ -2,24 +2,15 @@ package com.gathin.tvhome;
 
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
-import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
-import android.net.wifi.WifiInfo;
-import android.net.wifi.WifiManager;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -42,31 +33,34 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
+ * Home over a full-bleed wallpaper: a tab pill on top, a hero for the focused favourite, a Favorites row,
+ * the rest of the apps in a grid below, and one white focus ring that springs between tiles.
  */
 public class MainActivity extends Activity implements AppAdapter.TileListener {
 
-    /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
-    static int COLUMNS = 4;
-    private static final long MINUTE_MS = 60_000L;
+    /** Tiles per row and Favorites slots (res/values/config.xml, columns). Set in onCreate. */
+    static int COLUMNS = 6;
     private String liveTvPkg;
+    /** Hero eyebrow and tagline per package (res/values/config.xml, hero_text). */
+    private final Map<String, String[]> heroText = new HashMap<>();
+    /** Top of the Favorites row in root coordinates, once known; the hero and header hang above it. */
+    private float rowTop = -1f;
 
     private AppAdapter adapter;
     private RecyclerView grid;
     private FrameLayout root;
     private GlassView glass;
-    private View ambient;
-    private TextView heroName;
-    private GradientDrawable ambientGlow;
-    private int ambientColor;
+    private View hero;
+    private TextView heroEyebrow, heroName, heroTagline;
+    private View favHeader;
     private boolean heroShown;
-    private TextView greeting;
-    private TextView btnWifi;
+    private TextView tabHome, tabApps, tabInputs, tabSettings;
     private SpringAnimation springX, springY;
     private float glassTargetX, glassTargetY;
     private boolean glassShown;
@@ -77,48 +71,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static String lastFocusedKey;
     private float density;
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    /** Refreshes the network pill when the connection changes: at boot Wi-Fi often connects after Home is shown. */
-    private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
-        @Override
-        public void onAvailable(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
-        }
-
-        @Override
-        public void onLost(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
-        }
-    };
-    private final Runnable minuteTick = new Runnable() {
-        @Override
-        public void run() {
-            updateGreeting();
-            updateWifiLabel();
-            handler.postDelayed(this, MINUTE_MS);
-        }
-    };
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        GlassTileView.prepare(getResources(), R.drawable.wallpaper);
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
         COLUMNS = Math.max(1, getResources().getInteger(R.integer.columns));
         liveTvPkg = getString(R.string.live_tv_package).trim();
+        for (String line : getResources().getStringArray(R.array.hero_text)) {
+            String[] parts = line.split("\\|", 3);
+            if (parts.length == 3) heroText.put(parts[0].trim(), new String[]{parts[1].trim(), parts[2].trim()});
+        }
 
         root = findViewById(R.id.root);
         glass = findViewById(R.id.glass);
-        ambient = findViewById(R.id.ambient);
+        hero = findViewById(R.id.hero);
+        heroEyebrow = findViewById(R.id.heroEyebrow);
         heroName = findViewById(R.id.heroName);
-        ambientGlow = new GradientDrawable();
-        ambientGlow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
-        ambientGlow.setGradientCenter(0.32f, 0.42f);
-        ambient.setBackground(ambientGlow);
-        ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
-                ambientGlow.setGradientRadius((r - l) * 0.62f));
-        greeting = findViewById(R.id.greeting);
-        btnWifi = findViewById(R.id.btnWifi);
+        heroTagline = findViewById(R.id.heroTagline);
+        favHeader = findViewById(R.id.favHeader);
+        // Android 9 ignores fontVariationSettings from XML on font resources, so set the weights here.
+        heroName.setFontVariationSettings("'wght' 600");
+        heroEyebrow.setFontVariationSettings("'wght' 600");
+        ((TextView) findViewById(R.id.wordmark)).setFontVariationSettings("'wght' 600");
+        ((TextView) findViewById(R.id.clock)).setFontVariationSettings("'wght' 500");
 
         grid = findViewById(R.id.grid);
         grid.setLayoutManager(new GridLayoutManager(this, COLUMNS));
@@ -130,20 +107,26 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS);
         grid.setAdapter(adapter);
 
-        // tvOS layout: push the dock row to the bottom of the screen; the grid hides below until you press Down.
+        // Sit the Favorites row about two thirds down, with open space below; the grid hides under it
+        // until you press Down.
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int h = b - t;
-            int dockRow = (int) ((145 + 6 + 12) * density);   // item height plus DockDecoration offsets
-            int want = Math.max(0, h - dockRow - (int) (30 * density));
+            int dockRow = (int) ((116 + 6 + 12) * density);   // item height plus DockDecoration offsets
+            int want = Math.max(0, h - dockRow - (int) (h * 0.24f));
             if (grid.getPaddingTop() != want) {
                 grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
             }
         });
 
-        // Keep the glass glued to its tile while the grid scrolls.
+        // Keep the ring glued to its tile while the grid scrolls.
         grid.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // Glass tiles show the wallpaper behind them, which changes as they move.
+                for (int i = 0; i < rv.getChildCount(); i++) {
+                    View bg = rv.getChildAt(i).findViewById(R.id.glassBg);
+                    if (bg != null) bg.invalidate();
+                }
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 if (springY.isRunning()) springY.animateToFinalPosition(glassTargetY);
@@ -151,39 +134,50 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         });
 
-        // Liquid feel: soft springs on the highlight's position.
+        // Focus moves are repositioning, not flicks: near critically damped springs (response ~0.35 s,
+        // stiffness = (2π / response)²) with independent X and Y, so the lens glides without wobble.
         springX = new SpringAnimation(glass, DynamicAnimation.TRANSLATION_X);
         springY = new SpringAnimation(glass, DynamicAnimation.TRANSLATION_Y);
         for (SpringAnimation s : new SpringAnimation[]{springX, springY}) {
-            s.setSpring(new SpringForce().setStiffness(260f).setDampingRatio(0.58f));
+            s.setSpring(new SpringForce().setStiffness(320f).setDampingRatio(0.9f));
         }
 
-        View btnInputs = findViewById(R.id.btnInputs);
-        View btnSettings = findViewById(R.id.btnSettings);
-        btnInputs.setOnClickListener(v -> showInputs());
-        btnWifi.setOnClickListener(v -> open(new Intent(Settings.ACTION_WIFI_SETTINGS)));
-        btnSettings.setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
+        tabHome = findViewById(R.id.tabHome);
+        tabApps = findViewById(R.id.tabApps);
+        tabInputs = findViewById(R.id.tabInputs);
+        tabSettings = findViewById(R.id.tabSettings);
+        tabHome.setOnClickListener(v -> focusTile(0));
+        tabApps.setOnClickListener(v -> {
+            if (adapter.getItemCount() > COLUMNS) focusTile(COLUMNS);
+            else Toast.makeText(this, R.string.no_more_apps, Toast.LENGTH_SHORT).show();
+        });
+        tabInputs.setOnClickListener(v -> showInputs());
+        tabSettings.setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
 
-        // Keep focus on the top bar at its ends and at the top: Android's focus finder would otherwise
-        // jump to a tile far below when there is nothing in that direction.
-        View.OnKeyListener pillKeys = (v, keyCode, event) -> {
+        // Keep focus on the tab pill at its ends and at the top; Down returns to the last focused tile
+        // instead of whichever tile Android's focus finder happens to pick below the pill.
+        View.OnKeyListener tabKeys = (v, keyCode, event) -> {
             if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v.getId() == R.id.btnInputs) return true;
-            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+                focusTile(lastFocused);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v == tabHome) return true;
+            return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v == tabSettings;
         };
-        btnInputs.setOnKeyListener(pillKeys);
-        btnWifi.setOnKeyListener(pillKeys);
-        btnSettings.setOnKeyListener(pillKeys);
+        for (TextView t : new TextView[]{tabHome, tabApps, tabInputs, tabSettings}) {
+            t.setOnKeyListener(tabKeys);
+            t.setFontVariationSettings("'wght' 450");   // XML weights are ignored on Android 9
+        }
+        tabHome.setSelected(true);
 
-        // Hide the glass when focus leaves the tiles.
+        // Hide the rim when focus leaves the tiles; on the tabs the hero turns into the welcome.
         getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
             boolean onTile = newF != null && newF.getId() == R.id.card;
             if (!onTile) hideGlass();
+            if (newF != null && newF.getParent() == findViewById(R.id.tabs)) showWelcome();
         });
-
-        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
-        if (cm != null) cm.registerDefaultNetworkCallback(networkCallback);
     }
 
     @Override
@@ -192,16 +186,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glassShown = false;
         glass.setAlpha(0f);
         heroShown = false;
-        heroName.setAlpha(0f);
-        ambient.setAlpha(0f);
+        hero.setAlpha(0f);
+        favHeader.setAlpha(0f);
         // Read these before reload(): rebinding can move focus to the first tile and overwrite them.
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
         adapter.reload();
         grid.scheduleLayoutAnimation();
-        updateGreeting();
-        updateWifiLabel();
-        handler.postDelayed(minuteTick, MINUTE_MS);
 
         // Return to the app we left from, or the same slot if that app is gone. Always refocus: after
         // reload() the view that holds focus may no longer show the app it had.
@@ -212,35 +203,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        handler.removeCallbacks(minuteTick);
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
-        if (cm != null) cm.unregisterNetworkCallback(networkCallback);
-    }
-
-    @Override
     public void onBackPressed() {
         // Home screen: Back goes nowhere.
     }
 
-    // ---- glass highlight -------------------------------------------------------------------------
+    // ---- focus ring ------------------------------------------------------------------------------
 
     @Override
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
+        tabHome.setSelected(position < COLUMNS);
+        tabApps.setSelected(position >= COLUMNS);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
         root.offsetDescendantRectToMyCoords(card, r);
         float pad = 6f * density;        // matches GlassView's glow inset
-        float w = card.getWidth() * AppAdapter.FOCUS_SCALE + 2 * pad;
-        float h = card.getHeight() * AppAdapter.FOCUS_SCALE + 2 * pad;
+        float gap = 0f;                  // the rim hugs the tile edge
+        float w = card.getWidth() * AppAdapter.FOCUS_SCALE + 2 * (pad + gap);
+        float h = card.getHeight() * AppAdapter.FOCUS_SCALE + 2 * (pad + gap);
         float x = r.exactCenterX() - w / 2f;
         float y = r.exactCenterY() - h / 2f;
 
@@ -249,7 +230,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             lp.width = (int) w;
             lp.height = (int) h;
             glass.setLayoutParams(lp);
-            glass.setRadius(16f * density * AppAdapter.FOCUS_SCALE + pad);
+            glass.setRadius(AppAdapter.TILE_RADIUS_DP * density * AppAdapter.FOCUS_SCALE + gap);
         }
         glassTargetX = x;
         glassTargetY = y;
@@ -266,64 +247,70 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         View item = (View) card.getParent();
         if (position < COLUMNS) {
-            // Dock: park it at the bottom of the screen and show the top shelf for this app.
+            // Favorites: park the row at the bottom of the screen and show the hero for this app.
             int decoratedTop = item.getTop() - (int) (6 * density);
             int dy = decoratedTop - grid.getPaddingTop();
             if (Math.abs(dy) > 1) grid.smoothScrollBy(0, dy);
-            showHero(position, r.top - dy);
+            rowTop = r.top - dy;
+            String[] text = heroText.get(adapter.packageAt(position));
+            showHero(text != null ? text[0] : getString(R.string.default_eyebrow), adapter.labelAt(position),
+                    text != null ? text[1] : getString(R.string.default_tagline));
         } else {
             hideHero();
-            // Scroll just enough so the whole glass (not only the tile) is visible.
+            // Scroll just enough so the whole ring (not only the tile) is visible.
             Rect want = new Rect(0, -(int) pad * 2, item.getWidth(), item.getHeight() + (int) pad);
             grid.requestChildRectangleOnScreen(item, want, false);
         }
     }
 
-    // ---- top shelf -------------------------------------------------------------------------------
+    // ---- hero ------------------------------------------------------------------------------------
 
-    private void showHero(int position, float dockTopInRoot) {
-        String label = adapter.labelAt(position);
-        int color = adapter.ambientColorAt(position);
-        float y = dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
-        boolean changed = !label.contentEquals(heroName.getText());
-
-        if (!heroShown) {
-            heroName.setText(label);
-            heroName.setY(y);
-            heroName.setTranslationX(0f);
-            heroName.animate().alpha(1f).setDuration(260).start();
-            setAmbient(color);
-            ambient.animate().alpha(1f).setDuration(600).start();
-            heroShown = true;
-        } else if (changed) {
-            heroName.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
-                heroName.setText(label);
-                heroName.setY(y);
-                heroName.setTranslationX(12 * density);
-                heroName.animate().alpha(1f).translationX(0f).setDuration(200).start();
-            }).start();
-            if (color != ambientColor) {
-                ambient.animate().alpha(0.35f).setDuration(200).withEndAction(() -> {
-                    setAmbient(color);
-                    ambient.animate().alpha(1f).setDuration(500).start();
-                }).start();
-            }
-        } else {
-            heroName.setY(y);
+    /** The greeting shown while focus is on the tabs. */
+    private void showWelcome() {
+        if (rowTop < 0) {
+            RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(0);
+            if (vh == null) return;
+            View card = vh.itemView.findViewById(R.id.card);
+            Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+            root.offsetDescendantRectToMyCoords(card, r);
+            rowTop = r.top;
         }
+        showHero(getString(R.string.welcome_eyebrow), getString(R.string.welcome_title),
+                getString(R.string.welcome_tagline));
     }
 
-    private void setAmbient(int color) {
-        ambientColor = color;
-        int c = color & 0x00FFFFFF;
-        ambientGlow.setColors(new int[]{0x5C000000 | c, 0x26000000 | c, 0x00000000 | c});
+    private void showHero(String eyebrow, String title, String tagline) {
+        float headerY = rowTop - 16 * density - favHeader.getHeight();
+        favHeader.setY(headerY);
+        boolean changed = !title.contentEquals(heroName.getText());
+
+        if (!heroShown) {
+            heroEyebrow.setText(eyebrow);
+            heroName.setText(title);
+            heroTagline.setText(tagline);
+            hero.setTranslationX(0f);
+            hero.animate().alpha(1f).setDuration(260).start();
+            favHeader.animate().alpha(1f).setDuration(260).start();
+            heroShown = true;
+        } else if (changed) {
+            // Cross-fade with a small drift, like tvOS.
+            hero.animate().alpha(0f).translationX(-12 * density).setDuration(140).withEndAction(() -> {
+                heroEyebrow.setText(eyebrow);
+                heroName.setText(title);
+                heroTagline.setText(tagline);
+                hero.setTranslationX(12 * density);
+                hero.animate().alpha(1f).translationX(0f).setDuration(240).start();
+            }).start();
+        }
+        // The hero's height can change with the text; place it once it has been measured.
+        hero.post(() -> hero.setY(headerY - 40 * density - hero.getHeight()));
     }
 
     private void hideHero() {
         if (!heroShown) return;
         heroShown = false;
-        heroName.animate().alpha(0f).setDuration(160).start();
-        ambient.animate().alpha(0f).setDuration(300).start();
+        hero.animate().alpha(0f).setDuration(160).start();
+        favHeader.animate().alpha(0f).setDuration(160).start();
     }
 
     private void hideGlass() {
@@ -339,7 +326,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int count = adapter.getItemCount();
         int target;
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
+            if (position < COLUMNS) {                       // Favorites row: go up to the tabs
+                tabHome.requestFocus();
+                return true;
+            }
             target = position - COLUMNS;
         } else {
             int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
@@ -356,7 +346,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         if (vh != null) {
             View card = vh.itemView.findViewById(R.id.card);
-            // Already focused (e.g. back from an app): no focus change fires, so restore the glass by hand.
+            // Already focused (e.g. back from an app): no focus change fires, so restore the ring by hand.
             if (card.isFocused()) onTileFocused(pos, card);
             else card.requestFocus();
             return;
@@ -375,43 +365,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.smoothScrollToPosition(pos);
     }
 
-    // ---- top bar ---------------------------------------------------------------------------------
-
-    private void updateGreeting() {
-        int hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-        int res;
-        if (hour < 5) res = R.string.good_night;
-        else if (hour < 12) res = R.string.good_morning;
-        else if (hour < 17) res = R.string.good_afternoon;
-        else if (hour < 22) res = R.string.good_evening;
-        else res = R.string.good_night;
-        greeting.setText(res);
-    }
-
-    /** Shows the Wi-Fi network name on the button when we can read it, otherwise the connection type. */
-    private void updateWifiLabel() {
-        String text = getString(R.string.wifi);
-        try {
-            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-            Network net = cm != null ? cm.getActiveNetwork() : null;
-            NetworkCapabilities caps = net != null ? cm.getNetworkCapabilities(net) : null;
-            if (caps == null) {
-                text = getString(R.string.offline);
-            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
-                text = getString(R.string.ethernet);
-            } else if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-                WifiInfo info = wm != null ? wm.getConnectionInfo() : null;
-                String ssid = info != null ? info.getSSID() : null;
-                if (ssid != null) {
-                    ssid = ssid.replace("\"", "").trim();
-                    if (!ssid.isEmpty() && !ssid.contains("unknown") && !ssid.equals("0x")) text = ssid;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        btnWifi.setText(text);
-    }
+    // ---- tabs ------------------------------------------------------------------------------------
 
     private void open(Intent i) {
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -422,13 +376,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** Dropdown menu under the Inputs pill: HDMI ports (with connection state), AV and Live TV. */
+    /** Dropdown menu under the Inputs tab: HDMI ports (with connection state), AV and Live TV. */
     private void showInputs() {
-        View anchor = findViewById(R.id.btnInputs);
+        View anchor = tabInputs;
         View panel = getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
 
-        // Compact: as wide as the Inputs pill (a touch wider so "HDMI 1" fits), hanging right below it.
         int width = Math.max(anchor.getWidth(), (int) (150 * density));
         final PopupWindow popup = new PopupWindow(panel, width, ViewGroup.LayoutParams.WRAP_CONTENT, true);
         popup.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));   // needed for Back to dismiss
@@ -501,7 +454,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         panel.setPivotY(0f);
         panel.setScaleY(0.92f);
         panel.setTranslationY(-8 * density);
-        popup.showAsDropDown(anchor, 0, (int) (10 * density), Gravity.START);
+        popup.showAsDropDown(anchor, 0, (int) (12 * density), Gravity.START);
         panel.animate().alpha(1f).scaleY(1f).translationY(0f).setDuration(220)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
         rows.getChildAt(0).requestFocus();

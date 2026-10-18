@@ -21,6 +21,7 @@ import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -64,7 +65,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
     }
 
-    static final float FOCUS_SCALE = 1.10f;
+    static final float FOCUS_SCALE = 1.08f;
+    /** Tile names are always shown, dimmed until the tile is focused. */
+    static final float NAME_ALPHA = 0.8f;
+    static final float TILE_RADIUS_DP = 12f;
 
     private final Context ctx;
     private final TileListener listener;
@@ -126,24 +130,11 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     public void onBindViewHolder(@NonNull Holder h, int position) {
         Entry e = items.get(position);
         h.name.setText(e.label);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
-        h.name.setAlpha(focused ? 1f : 0f);
+        h.name.setAlpha(focused ? 1f : NAME_ALPHA);
         h.card.setScaleX(focused ? FOCUS_SCALE : 1f);
         h.card.setScaleY(focused ? FOCUS_SCALE : 1f);
-        if (e.banner != null) {
-            h.banner.setImageDrawable(e.banner);
-            h.banner.setVisibility(View.VISIBLE);
-            h.icon.setVisibility(View.GONE);
-            h.label.setVisibility(View.GONE);
-        } else {
-            h.banner.setImageDrawable(null);
-            h.banner.setVisibility(View.GONE);
-            h.icon.setImageDrawable(e.icon);
-            h.icon.setVisibility(View.VISIBLE);
-            h.label.setText(e.label);
-            h.label.setVisibility(View.VISIBLE);
-        }
+        bindLogo(h, e);
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
@@ -154,6 +145,65 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
             return true;
         });
+    }
+
+    /**
+     * The tile face: a brand mark plus a white wordmark on the glass, like the reference designs.
+     * Known apps get a drawn mark; anything else shows its own icon (rounded) and its name.
+     */
+    private void bindLogo(Holder h, Entry e) {
+        float d = ctx.getResources().getDisplayMetrics().density;
+        int markRes = 0, markHeightDp = 26, weight = 600;
+        float textSp = 12f, spacing = -0.02f;
+        boolean markBelow = false;
+        String text = e.label;
+        switch (e.pkg) {
+            case "com.google.android.youtube.tv":
+                markRes = R.drawable.ic_logo_youtube; markHeightDp = 17; text = "YouTube";
+                textSp = 16f; weight = 700; spacing = -0.05f;
+                break;
+            case "com.google.android.youtube.tvmusic":
+                markRes = R.drawable.ic_logo_ytmusic; markHeightDp = 18; text = "YouTube Music";
+                textSp = 12.5f; weight = 700; spacing = -0.04f;
+                break;
+            case "com.android.vending":
+                markRes = R.drawable.ic_logo_play; markHeightDp = 24; text = "Google Play\nStore";
+                textSp = 12f; weight = 500;
+                break;
+            case "com.amazon.amazonvideo.livingroom":
+                markRes = R.drawable.ic_logo_smile; markHeightDp = 10; text = "prime video";
+                textSp = 17f; weight = 700; spacing = -0.03f; markBelow = true;
+                break;
+        }
+
+        h.logo.setOrientation(markBelow ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        h.logo.removeAllViews();
+        if (markBelow) {
+            h.logo.addView(h.wordmark);
+            h.logo.addView(h.mark);
+        } else {
+            h.logo.addView(h.mark);
+            h.logo.addView(h.wordmark);
+        }
+
+        LinearLayout.LayoutParams mp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, (int) (markHeightDp * d));
+        if (markBelow) mp.topMargin = (int) (1 * d);
+        else mp.setMarginEnd((int) (6 * d));
+        mp.gravity = android.view.Gravity.CENTER;
+        h.mark.setLayoutParams(mp);
+
+        if (markRes != 0) {
+            h.mark.setImageResource(markRes);
+            h.mark.setClipToOutline(false);
+        } else {
+            h.mark.setImageDrawable(e.icon);
+            h.mark.setClipToOutline(true);   // round off square TV icons
+        }
+        h.wordmark.setText(text);
+        h.wordmark.setTextSize(textSp);
+        h.wordmark.setLetterSpacing(spacing);
+        h.wordmark.setFontVariationSettings("'wght' " + weight);
     }
 
     private void launch(Entry e) {
@@ -190,6 +240,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             if (items.get(i).component.flattenToShortString().equals(key)) return i;
         }
         return -1;
+    }
+
+    String packageAt(int position) {
+        return position >= 0 && position < items.size() ? items.get(position).pkg : "";
     }
 
     String labelAt(int position) {
@@ -248,21 +302,21 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
     static final class Holder extends RecyclerView.ViewHolder {
         final View card;
-        final ImageView banner;
-        final ImageView icon;
-        final TextView label;
+        final LinearLayout logo;
+        final ImageView mark;
+        final TextView wordmark;
         final TextView name;
 
         Holder(View v, TileListener listener) {
             super(v);
             card = v.findViewById(R.id.card);
-            banner = v.findViewById(R.id.banner);
-            icon = v.findViewById(R.id.icon);
-            label = v.findViewById(R.id.label);
+            logo = v.findViewById(R.id.logo);
+            mark = v.findViewById(R.id.mark);
+            wordmark = v.findViewById(R.id.wordmark);
             name = v.findViewById(R.id.name);
 
             final float density = v.getResources().getDisplayMetrics().density;
-            final float radius = density * 16f;
+            final float radius = density * TILE_RADIUS_DP;
             card.setOutlineProvider(new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {
@@ -270,6 +324,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 }
             });
             card.setClipToOutline(true);
+
+            // Many TV apps ship square icons with hard corners: round them off like app-store icons.
+            final float iconRadius = density * 6f;
+            mark.setOutlineProvider(new ViewOutlineProvider() {
+                @Override
+                public void getOutline(View view, Outline outline) {
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), iconRadius);
+                }
+            });
 
             card.setOnKeyListener((view, keyCode, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
@@ -282,10 +345,10 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 float s = focused ? FOCUS_SCALE : 1.0f;
                 view.animate().scaleX(s).scaleY(s)
                         .setDuration(focused ? 260 : 180)
-                        .setInterpolator(new OvershootInterpolator(focused ? 1.6f : 0f))
+                        .setInterpolator(new OvershootInterpolator(focused ? 0.6f : 0f))
                         .start();
-                name.animate().alpha(focused ? 1f : 0f)
-                        .translationY(focused ? density * 4f : -density * 6f)
+                name.animate().alpha(focused ? 1f : NAME_ALPHA)
+                        .translationY(focused ? density * 4f : 0f)
                         .setDuration(220).start();
                 int pos = getBindingAdapterPosition();
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {
