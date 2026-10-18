@@ -1,0 +1,11 @@
+.venv/
+certs/
+pairing_code.txt
+tv-screenshot.png
+tv-after.png
+backup/
+launcher/local.properties
+launcher/.gradle/
+launcher/app/build/
+launcher/build/
+tools/venv/

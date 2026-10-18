@@ -1,0 +1,28 @@
+# Xiaomi MiTV4I (codename magnolia), Android TV 9 (SDK 28), Amlogic/droidlogic.
+# Live TV app: com.android.tv (set as live_tv_package and hidden in launcher config.xml).
+# Stock launcher: com.google.android.tvlauncher (disabled by build-and-install only after the new one is home).
+#
+# Apply:   tools\disable.ps1 -TvHost 192.168.1.18 examples\xiaomi-mitv4i\debloat.txt
+# Undo:    tools\restore.ps1 -TvHost 192.168.1.18 examples\xiaomi-mitv4i\debloat.txt
+# Everything here is DISABLED, not uninstalled. Comment out any line you want to keep.
+#
+# Already removed earlier with `pm uninstall --user 0` (see removed-packages.txt): Xiaomi telemetry
+# (com.miui.tv.analytics, com.xiaomi.statistic), Sensara, partner streaming apps, the autoinstall
+# configs, Play Music/Movies/Games and the old leanback launcher.
+#
+# Kept on purpose: voice assistant (katniss, speech.pumpkin), Chromecast (mediashell),
+# com.xiaomi.android.tvsetup.partnercustomizer (Bluetooth remote pairing guide, global buttons),
+# com.mitv.tvlock (parental lock), com.xiaomi.mitv.mediaexplorer (USB media player).
+
+# PatchWall and recommendation rows
+com.mitv.tvhome.atv
+com.google.android.tvrecommendations
+
+# Xiaomi background services
+com.xiaomi.mitv.tvmanager              # "TV Manager" cleaner
+com.xiaomi.mitv.updateservice          # firmware updates and partner-app pushes: re-enable to check for an update
+com.mitv.milinkservice                 # Mi Cast; Chromecast still works
+
+# Preloaded apps
+com.xiaomi.mimusic2
+com.mitv.gallery                       # Mi Gallery; Media Explorer still opens USB photos

@@ -1,0 +1,39 @@
+# Packages removed from the MiTV4I with `pm uninstall --user 0` (2026-10-18).
+# Restore one with:  adb -s 192.168.1.18:5555 shell cmd package install-existing <package>
+# Apps from the Play Store (group 4) may need reinstalling from the Play Store instead.
+
+# 1. Xiaomi-pushed streaming apps
+com.sonyliv
+in.startv.hotstar
+com.jio.media.stb.ondemand
+com.mxtech.videoplayer.television
+com.mitv.tvhome.mitvplus
+com.hungama.movies.xtv
+com.suntv.sunnxt.mitv
+tv.airtel.xstream.tvapp
+android.autoinstalls.config.xiaomi.amelie
+android.autoinstalls.config.xioami.dangal
+
+# 2. Tracking and analytics
+com.miui.tv.analytics
+com.xiaomi.statistic
+co.sensara.tv.mitv
+co.sensara.tv.mitv.res
+com.xm.webcontent
+
+# 3. Retired or unused Google apps
+com.google.android.music
+com.google.android.videos
+com.google.android.play.games
+com.google.android.leanbacklauncher
+com.google.android.leanbacklauncher.recommendations
+com.google.android.tv.bugreportsender
+com.google.android.feedback
+
+# 4. Play Store apps
+com.spotify.tv.android
+com.yodo1.crossyroad
+com.ionitech.airscreen
+jp.co.rarity.tvweb
+com.mrebollob.tabatatimer
+belluste.timerapptv
