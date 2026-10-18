@@ -6,6 +6,9 @@ can be undone.
 
 ![The new home screen](docs/home.jpg)
 
+▶ **[Watch the 40-second demo](social/tv-demo.mp4)**, recorded on the TV: Favorites, welcome screen
+and the Inputs menu.
+
 | Before: stock home with a sponsored row | After: welcome screen |
 |---|---|
 | ![Stock Google TV home with a "Sponsored by JioHotstar" row](docs/before.jpg) | ![The new launcher's welcome screen](docs/welcome.jpg) |
